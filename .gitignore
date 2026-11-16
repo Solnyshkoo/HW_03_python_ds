@@ -1,0 +1,15 @@
+# Виртуальное окружение
+venv/
+.venv/
+
+# Кэш Python и pytest
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Системные файлы macOS и Jupyter
+.DS_Store
+.ipynb_checkpoints/
+.vscode/
+.idea/
