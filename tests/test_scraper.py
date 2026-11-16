@@ -1,6 +1,7 @@
 import os
 import sys
 import pytest
+import json
 
 # Добавляем корневую папку проекта в пути поиска модулей Python
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -103,46 +104,57 @@ def test_get_book_data_request_error(monkeypatch) -> None:
 
 
 def test_scrape_books_and_save(monkeypatch, tmp_path) -> None:
-    """Проверяет сбор книг со страницы каталога и сохранение результата в файл."""
-    catalog_html = """
-    <html>
-        <article class="product_pod">
-            <h3>
-                <a href="book1.html" title="Test Book">Test Book</a>
-            </h3>
-        </article>
-    </html>
-    """
+    """Проверяет переход между страницами каталога, сбор книг и сохранение результата."""
+    catalog_pages = {
+        "page-1.html": """
+            <html>
+                <article class="product_pod">
+                    <h3><a href="book1.html">Book 1</a></h3>
+                </article>
+                <li class="next"><a href="page-2.html">next</a></li>
+            </html>
+        """,
+        "page-2.html": """
+            <html>
+                <article class="product_pod">
+                    <h3><a href="book2.html">Book 2</a></h3>
+                </article>
+            </html>
+        """,
+    }
+    requested_pages = []
 
     class MockResponse:
-        status_code = 200
-        content = catalog_html.encode("utf-8")
+        def __init__(self, status_code, content=b""):
+            self.status_code = status_code
+            self.content = content
 
-    def mock_get(*args, **kwargs):
-        return MockResponse()
+    def mock_get(url, *args, **kwargs):
+        requested_pages.append(url)
+        for page_name, html in catalog_pages.items():
+            if page_name in url:
+                return MockResponse(200, html.encode("utf-8"))
+        return MockResponse(404)
 
     def mock_get_book_data(url: str) -> dict:
-        return {
-            "title": "Test Book",
-            "price": "£25.00",
-            "rating": 3,
-        }
+        return {"title": url.split("/")[-1]}
 
     monkeypatch.setattr(scraper.requests, "get", mock_get)
     monkeypatch.setattr(scraper, "get_book_data", mock_get_book_data)
     monkeypatch.chdir(tmp_path)
-
     result = scraper.scrape_books(is_save=True)
-
-    assert isinstance(result, list)
-    assert len(result) == 1
-    assert result[0]["title"] == "Test Book"
-
+    # Проверяем сбор книг с обеих страниц
+    assert len(result) == 2
+    assert result[0]["title"] == "book1.html"
+    assert result[1]["title"] == "book2.html"
+    # Проверяем, что парсер запросил все три страницы
+    assert any("page-1.html" in url for url in requested_pages)
+    assert any("page-2.html" in url for url in requested_pages)
+    assert any("page-3.html" in url for url in requested_pages)
+    # Проверяем сохранение данных в файл
     file_path = tmp_path / "books_data.txt"
     assert file_path.exists()
-
     with open(file_path, "r", encoding="utf-8") as file:
         saved_data = json.load(file)
-
-    assert len(saved_data) == 1
-    assert saved_data[0]["title"] == "Test Book"
+    assert len(saved_data) == 2
+    assert saved_data[0]["title"] == "book1.html"
