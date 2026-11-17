@@ -10,7 +10,7 @@ import scraper
 
 @pytest.fixture
 def sample_book_html() -> bytes:
-    """Фикстура с эталонной HTML-разметкой страницы одной книги."""
+    """Структура с эталонной HTML-разметкой страницы одной книги."""
     html = """
     <html>
         <div class="product_main">
